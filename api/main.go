@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"short-urls/routes"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -21,7 +22,6 @@ func main() {
 	if(err!= nil) {
 		fmt.Println(err)
 	}
-
 	// create fiber app instance
 	app := fiber.New()
 
