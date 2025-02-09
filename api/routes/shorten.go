@@ -21,7 +21,7 @@ type response struct {
 	XRateLimitRest	time.Duration	`json:"rate_limit_reset"`
 }
 
-
+// Handler for the Shorten endpoint.
 func ShortenURL(ctx *fiber.Ctx) error {
 
 	// parse request body
@@ -30,12 +30,12 @@ func ShortenURL(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error":"cannot parse JSON"})
 	}
 
-	// rate limiting - checking the user ip
+	// TODO: rate limiting - checking the user ip
 
 	// check if the input is an actual URL
-	// if !govalidator.IsURL(body.Url) {
-	// 	return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error":"Invalid Url"})
-	// }
+	if !govalidator.IsURL(body.Url) {
+		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error":"Invalid Url"})
+	}
 
 	// check for domain error 
 	if !helpers.RemoveDomainError(body.Url){

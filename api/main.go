@@ -12,7 +12,7 @@ import (
 )
 
 func setupRoutes(app *fiber.App) {
-	app.Get("/url", routes.ResolveURL)
+	app.Get("/:url", routes.ResolveURL)
 	app.Post("/api/v1", routes.ShortenURL)
 }
 
@@ -24,10 +24,8 @@ func main() {
 	}
 	// create fiber app instance
 	app := fiber.New()
-
-	// registe middlewares
+	// register middlewares
 	app.Use(logger.New())
-
 	// setup routing
 	setupRoutes(app)
 
