@@ -14,7 +14,7 @@ func ResolveURL(ctx *fiber.Ctx) error {
 	url := ctx.Params("url")
 	
 	// create database client and close it in the end
-	dbClient := database.CreateDatabaseClient(0)
+	dbClient := database.CreateDatabaseClient(database.SHORT_URLS_DB_NR)
 	defer dbClient.Close()
 
 	// retreive the value for the urlkey
@@ -30,7 +30,7 @@ func ResolveURL(ctx *fiber.Ctx) error {
 	}
 
 	// create client for counter db
-	dbClientCounter := database.CreateDatabaseClient(1)
+	dbClientCounter := database.CreateDatabaseClient(database.COUNTER_DB_NR)
 	defer dbClientCounter.Close()
 	
 	// increase the counter
