@@ -9,6 +9,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -36,9 +37,9 @@ func ShortenURL(ctx *fiber.Ctx) error {
 	}
 
 	// rate limiting - checking the user ip
-	dbClient := database.CreateDatabaseClient(database.COUNTER_DB_NR)
-	defer dbClient.Close()
-	if err := CheckRateLimit(dbClient,ctx); err != nil {
+	dbClientCounter := database.CreateDatabaseClient(database.COUNTER_DB_NR)
+	defer dbClientCounter.Close()
+	if err := CheckRateLimit(dbClientCounter,ctx); err != nil {
 		return err;
 	}
 
@@ -55,8 +56,41 @@ func ShortenURL(ctx *fiber.Ctx) error {
 	// enforce https, SSL
 	body.Url = helpers.EnforceHTTP(body.Url)
 
+	// generate short url id
+	var id string
+	if body.CustomShort == "" {
+		id = uuid.New().String()
+	} else {
+		id = body.CustomShort
+	}
+
+	// create clinet for the url db
+	dbClientUrl := database.CreateDatabaseClient(database.SHORT_URLS_DB_NR)
+	defer dbClientUrl.Close()
+
+	// check if given short url is already in use
+	targetUrl, _ := dbClientUrl.Get(database.Ctx, id).Result()
+	if targetUrl != "" {
+		return ctx.Status(fiber.StatusForbidden).JSON(fiber.Map {
+			"error" : "Given URL custom short is already in use.",
+		})
+	}
+
+	// set the expiry for the url
+	if body.Expiry == 0 {
+		body.Expiry = 24
+	}
+
+	// set the url mapping in the db
+	err := dbClientUrl.Set(database.Ctx,id,body.Url, time.Duration(body.Expiry) * time.Hour).Err()
+	if err != nil {
+		return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map {
+			"error" : "Somethiing went wrong.",
+		})
+	}
+
 	// decrement the database key for ip
-	dbClient.Decr(database.Ctx,ctx.IP())
+	dbClientCounter.Decr(database.Ctx,ctx.IP())
 	
 	return nil
 }
@@ -87,7 +121,7 @@ func CheckRateLimit(dbClient *redis.Client, ctx *fiber.Ctx ) error {
 
 			return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 				"error":"Request rate limit exceeded.",
-				"rate_limit_rest": limit / time.Nanosecond / time.Minute,
+				"rate_limit_reset": limit / time.Nanosecond / time.Minute,
 			})
 		}
 
