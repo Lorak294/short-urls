@@ -49,8 +49,32 @@ func ShortenURL(ctx *fiber.Ctx) error {
 	// rate limiting - checking the user ip
 	dbClientCounter := database.CreateDatabaseClient(database.COUNTER_DB_NR)
 	defer dbClientCounter.Close()
-	if err := CheckRateLimit(dbClientCounter,ctx,API_QUOTA,API_QUOTA_RESET); err != nil {
-		return err;
+	counterForIpStr, err := dbClientCounter.Get(database.Ctx,ctx.IP()).Result()
+	if err == redis.Nil {
+		// no ip in db -> set up new quota record
+		err = dbClientCounter.Set(
+			database.Ctx,
+			ctx.IP(),
+			API_QUOTA,
+			time.Duration(API_QUOTA_RESET) * time.Minute).Err()
+		if  err != nil {
+			return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error":"Something went wrong."})
+		}
+	} else {
+		// ip in db -> check the quota retreived for the ip
+		counterForIp, err := strconv.Atoi(counterForIpStr)
+		if  err != nil {
+			return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error":"Something went wrong."})
+		}
+		if counterForIp <= 0 {
+			limit, _ := dbClientCounter.TTL(database.Ctx,ctx.IP()).Result()
+
+			return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"error":"Request rate limit exceeded.",
+				"rate_limit_reset": limit / time.Nanosecond / time.Minute,
+			})
+		}
+
 	}
 
 	// check if the input is an actual URL
@@ -122,36 +146,4 @@ func ShortenURL(ctx *fiber.Ctx) error {
 	resp.CustomShort = os.Getenv("DOMAIN") + "/" + id
 
 	return ctx.Status(fiber.StatusOK).JSON(resp)
-}
-
-func CheckRateLimit(dbClient *redis.Client, ctx *fiber.Ctx, api_quota int, api_quota_reset int) error {
-	
-	counterForIpStr, err := dbClient.Get(database.Ctx,ctx.IP()).Result()
-	if err == redis.Nil {
-		// no ip in db -> set up new quota record
-		err = dbClient.Set(
-			database.Ctx,
-			ctx.IP(),
-			api_quota,
-			time.Duration(api_quota_reset) * time.Minute).Err()
-		if  err != nil {
-			return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error":"Something went wrong."})
-		}
-	} else {
-		// ip in db -> check the quota retreived for the ip
-		counterForIp, err := strconv.Atoi(counterForIpStr)
-		if  err != nil {
-			return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error":"Something went wrong."})
-		}
-		if counterForIp <= 0 {
-			limit, _ := dbClient.TTL(database.Ctx,ctx.IP()).Result()
-
-			return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"error":"Request rate limit exceeded.",
-				"rate_limit_reset": limit / time.Nanosecond / time.Minute,
-			})
-		}
-
-	}
-	return nil
 }
