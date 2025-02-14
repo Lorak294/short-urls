@@ -3,37 +3,29 @@ package routes
 import (
 	"os"
 	"short-urls/constants"
+	"short-urls/contracts"
 	"short-urls/database"
 	"short-urls/helpers"
+	"short-urls/validation"
 	"strconv"
 	"time"
 
-	"github.com/asaskevich/govalidator"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
-
-type request struct {
-	Url				string			`json:"url"`
-	CustomShort		string			`json:"short"`
-	Expiry			time.Duration	`json:"expiry"`
-}
-
-type response struct {
-	Url				string			`json:"url"`
-	CustomShort		string			`json:"short"`
-	Expiry			time.Duration	`json:"expiry"`
-	XRateRemaining	int				`json:"rate_limit"`
-	XRateLimitReset	time.Duration	`json:"rate_limit_reset"`
-}
 
 // Handler for the Shorten endpoint.
 func ShortenURL(ctx *fiber.Ctx) error {
 
 	// parse request body
-	body := new(request)
-	if err := ctx.BodyParser(&body); err != nil {
+	req := new(contracts.ShortenRequest)
+	if err := ctx.BodyParser(&req); err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": constants.ERROR_BODY_PARSE})
+	}
+
+	// validate request body
+	if err := validation.ValidateShortenRequest(*req); err != nil {
+		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	// get API quota constants
@@ -54,25 +46,15 @@ func ShortenURL(ctx *fiber.Ctx) error {
 		return ctx.Status(err_code).JSON(fiber.Map{"error":err.Error()})
 	}
 
-	// check if the input is an actual URL
-	if !govalidator.IsURL(body.Url) {
-		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error":constants.ERROR_INVALID_URL})
-	}
-
-	// check for domain error 
-	if !helpers.RemoveDomainError(body.Url){
-		return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error":constants.ERROR_FORBIDDEN_URL})
-	}
-
 	// enforce https, SSL
-	body.Url = helpers.EnforceHTTP(body.Url)
+	req.Url = helpers.EnforceHTTP(req.Url)
 
 	// generate short url id
 	var id string
-	if body.CustomShort == "" {
+	if req.CustomShort == "" {
 		id = uuid.New().String()
 	} else {
-		id = body.CustomShort
+		id = req.CustomShort
 	}
 
 	// check if given short url is already in use
@@ -81,22 +63,23 @@ func ShortenURL(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusForbidden).JSON(fiber.Map{"error" : constants.ERROR_SHORT_IN_USE})
 	}
 
-	// set the expiry for the url
-	if body.Expiry == 0 {
-		body.Expiry = 24
-	}
-
+	
 	// set the url mapping in the db
-	_ , err =  dbClient.CreateShortForUrl(id,body.Url,body.Expiry * time.Hour)
+	_ , err =  dbClient.CreateShortForUrl(id,req.Url,req.Expiry * time.Hour)
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error" : constants.ERROR_SERVER_GENERAL_ERROR})
 	}
+	
+	// set the expiry for the url
+	if req.Expiry == 0 {
+		req.Expiry = constants.DEFAULT_EXPIRY_DURATION
+	}
 
 	// prepare the response
-	resp := response{
-		Url: 				body.Url,
+	resp := contracts.ShortenResponse{
+		Url: 				req.Url,
 		CustomShort: 		"",
-		Expiry: 			body.Expiry,
+		Expiry: 			req.Expiry,
 		XRateRemaining: 	API_QUOTA,
 		XRateLimitReset: 	time.Duration(API_QUOTA_RESET)*time.Minute,
 	}

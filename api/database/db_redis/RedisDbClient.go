@@ -45,7 +45,6 @@ func (x *RedisDbClient)CreateShortForUrl(short string,url string,ttl time.Durati
 	return x.shortsDbClient.Set(CTX,short,url, ttl).Result()
 }
 
-
 // rate limiting
 func (x *RedisDbClient)GetRateLimitForIp(ip string) (int, error) {
 	res_str, err := x.rateLimitDbClient.Get(CTX,ip).Result()
