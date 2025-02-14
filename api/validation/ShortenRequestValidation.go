@@ -3,13 +3,12 @@ package validation
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"short-urls/contracts"
 	"strings"
 	"time"
-
-	"github.com/asaskevich/govalidator"
 )
 
 func ValidateShortenRequest(request contracts.ShortenRequest) error {
@@ -30,8 +29,9 @@ func ValidateShortenRequest(request contracts.ShortenRequest) error {
 	return validation_errors
 }
 
-func ValidteUrl(url string) bool {
-	return govalidator.IsURL(url)
+func ValidteUrl(inputUrl string) bool {
+	u, err := url.ParseRequestURI(inputUrl)
+	return err == nil && u.Scheme != "" && u.Host != ""
 }
 
 // checks if the given url contains current domain
@@ -52,5 +52,5 @@ func ValidateShort(short string) bool {
 }
 
 func ValidateExpiry(expiry time.Duration) bool {
-	return expiry >= 0 && expiry < MAX_EXPIRY
+	return expiry >= 0 && expiry <= MAX_EXPIRY
 }
