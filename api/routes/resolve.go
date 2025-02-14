@@ -15,11 +15,11 @@ func ResolveURL(ctx *fiber.Ctx) error {
 	url := ctx.Params("url")
 	
 	// create database client and close it in the end
-	dbClient := database.CreateDatabaseClient(database.SHORT_URLS_DB_NR)
+	dbClient := database.CreateDatabaseClient()
 	defer dbClient.Close()
 
 	// retreive the value for the urlkey
-	targetUrl, err := dbClient.Get(database.Ctx,url).Result()
+	targetUrl, err := dbClient.ResolveShortUrl(url)
 	if err == redis.Nil {
 		return ctx.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": constants.ERROR_SHORT_RESOLVE_FAIL})
 	} else if err != nil {

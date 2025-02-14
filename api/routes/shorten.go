@@ -47,9 +47,9 @@ func ShortenURL(ctx *fiber.Ctx) error {
 	}
 
 	// rate limiting - checking the user ip
-	dbClientCounter := database.CreateDatabaseClient(database.COUNTER_DB_NR)
-	defer dbClientCounter.Close()
-	err_code, err := helpers.CheckRateLimit(dbClientCounter,ctx.IP())
+	dbClient := database.CreateDatabaseClient()
+	defer dbClient.Close()
+	err_code, err := helpers.CheckRateLimit(dbClient,ctx.IP())
 	if err != nil {
 		return ctx.Status(err_code).JSON(fiber.Map{"error":err.Error()})
 	}
@@ -75,12 +75,8 @@ func ShortenURL(ctx *fiber.Ctx) error {
 		id = body.CustomShort
 	}
 
-	// create clinet for the url db
-	dbClientUrl := database.CreateDatabaseClient(database.SHORT_URLS_DB_NR)
-	defer dbClientUrl.Close()
-
 	// check if given short url is already in use
-	targetUrl, _ := dbClientUrl.Get(database.Ctx, id).Result()
+	targetUrl, _ := dbClient.ResolveShortUrl(id)
 	if targetUrl != "" {
 		return ctx.Status(fiber.StatusForbidden).JSON(fiber.Map{"error" : constants.ERROR_SHORT_IN_USE})
 	}
@@ -91,7 +87,7 @@ func ShortenURL(ctx *fiber.Ctx) error {
 	}
 
 	// set the url mapping in the db
-	err = dbClientUrl.Set(database.Ctx,id,body.Url, body.Expiry * time.Hour).Err()
+	_ , err =  dbClient.CreateShortForUrl(id,body.Url,body.Expiry * time.Hour)
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error" : constants.ERROR_SERVER_GENERAL_ERROR})
 	}
@@ -106,12 +102,11 @@ func ShortenURL(ctx *fiber.Ctx) error {
 	}
 
 	// decrement the database key for ip
-	dbClientCounter.Decr(database.Ctx,ctx.IP())
+	dbClient.DecrementRateLimitForIp(ctx.IP())
 	
 	// update the response rate limit fileds
-	val, _ := dbClientCounter.Get(database.Ctx,ctx.IP()).Result()
-	resp.XRateRemaining, _ = strconv.Atoi(val)
-	ttl, _ := dbClientCounter.TTL(database.Ctx,ctx.IP()).Result()
+	resp.XRateRemaining, _ =  dbClient.GetRateLimitForIp(ctx.IP())
+	ttl, _ := dbClient.GetLeftRateLimitTime(ctx.IP())
 	resp.XRateLimitReset = ttl / time.Nanosecond / time.Minute
 
 	// update the response custom url

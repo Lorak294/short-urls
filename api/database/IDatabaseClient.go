@@ -2,14 +2,15 @@ package database
 
 import "time"
 
-type DatabaseClient interface {
+type IDatabaseClient interface {
 
 	// state handling
-	Initialize() DatabaseClient
+	Initialize()
 	Close()
 
 	// short urls
 	ResolveShortUrl(url string) (string, error)
+	CreateShortForUrl(short string,url string,ttl time.Duration)  (string, error)
 
 	// rate limiting
 	GetRateLimitForIp(ip string) (int, error)
